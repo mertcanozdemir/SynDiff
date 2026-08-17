@@ -5,13 +5,14 @@ import numpy as np, h5py
 import random
 
 
-def CreateDatasetSynthesis(phase, input_path, contrast1 = 'T1', contrast2 = 'T2'):
+def CreateDatasetSynthesis(phase, input_path, contrast1 = 'T1', contrast2 = 'T2',
+                           image_size = 256):
 
     target_file = input_path + "/data_{}_{}.mat".format(phase, contrast1)
-    data_fs_s1=LoadDataSet(target_file)
+    data_fs_s1=LoadDataSet(target_file, target_size=image_size)
 
     target_file = input_path + "/data_{}_{}.mat".format(phase, contrast2)
-    data_fs_s2=LoadDataSet(target_file)
+    data_fs_s2=LoadDataSet(target_file, target_size=image_size)
 
     if data_fs_s1.shape[0] != data_fs_s2.shape[0]:
         raise ValueError(
@@ -24,7 +25,7 @@ def CreateDatasetSynthesis(phase, input_path, contrast1 = 'T1', contrast2 = 'T2'
 
 
 
-#Dataset loading from load_dir and converintg to 256x256
+#Dataset loading from load_dir, zero-padded out to target_size squared
 def LoadDataSet(load_dir, variable = 'data_fs', padding = True, Norm = True,
                 target_size = 256):
     if not os.path.isfile(load_dir):

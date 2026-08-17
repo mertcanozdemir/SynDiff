@@ -54,7 +54,7 @@ def sample_and_test(args):
 
     #loading dataset
     phase='test'
-    dataset=CreateDatasetSynthesis('test', args.input_path, args.contrast1, args.contrast2)
+    dataset=CreateDatasetSynthesis('test', args.input_path, args.contrast1, args.contrast2, image_size=args.image_size)
     data_loader = torch.utils.data.DataLoader(dataset,
                                                batch_size=1,
                                                shuffle=False,

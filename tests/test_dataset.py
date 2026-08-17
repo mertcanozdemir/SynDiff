@@ -86,3 +86,26 @@ def test_mismatched_slice_counts_are_rejected(tmp_path):
     write_mat(tmp_path / 'data_train_T2.mat', np.zeros((3, 152, 256), np.float32))
     with pytest.raises(ValueError, match="different number of slices"):
         CreateDatasetSynthesis('train', str(tmp_path), 'T1', 'T2')
+
+
+@pytest.mark.parametrize("image_size", [128, 192, 256])
+def test_target_size_is_configurable(tmp_path, image_size):
+    """--image_size has to reach the loader, not just the network."""
+    raw = np.zeros((2, 100, 120), dtype=np.float32)
+    data = LoadDataSet(write_mat(tmp_path / 'a.mat', raw), target_size=image_size)
+    assert data.shape == (2, 1, image_size, image_size)
+
+
+def test_create_dataset_forwards_the_image_size(tmp_path):
+    for contrast in ('T1', 'T2'):
+        write_mat(tmp_path / 'data_train_{}.mat'.format(contrast),
+                  np.zeros((2, 100, 120), np.float32))
+    dataset = CreateDatasetSynthesis('train', str(tmp_path), 'T1', 'T2', image_size=128)
+    first, second = dataset[0]
+    assert first.shape == second.shape == (1, 128, 128)
+
+
+def test_input_larger_than_the_target_is_rejected(tmp_path):
+    raw = np.zeros((2, 200, 256), dtype=np.float32)
+    with pytest.raises(ValueError, match="does not fit"):
+        LoadDataSet(write_mat(tmp_path / 'a.mat', raw), target_size=128)

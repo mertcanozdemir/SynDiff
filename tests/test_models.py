@@ -130,3 +130,18 @@ def test_translation_networks_preserve_spatial_shape():
     disc = generator_resnet.define_D(gpu_ids=[])
     # PatchGAN returns a map of patch scores rather than one scalar
     assert disc(out).ndim == 4
+
+
+@pytest.mark.parametrize("ngf", [16, 32, 64])
+def test_define_g_honours_the_channel_width(ngf):
+    """--ngf must reach the translation networks, not just the discriminators."""
+    net = generator_resnet.define_G(netG='resnet_6blocks', ngf=ngf, gpu_ids=[])
+    # the first conv after the reflection pad produces ngf feature maps
+    first_conv = [m for m in net.modules() if isinstance(m, nn.Conv2d)][0]
+    assert first_conv.out_channels == ngf
+
+
+def test_define_d_honours_the_channel_width():
+    net = generator_resnet.define_D(ndf=16, gpu_ids=[])
+    first_conv = [m for m in net.modules() if isinstance(m, nn.Conv2d)][0]
+    assert first_conv.out_channels == 16

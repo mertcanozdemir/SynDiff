@@ -104,8 +104,8 @@ def train_syndiff(rank, gpu, args):
     nz = args.nz #latent dimension
     
 
-    dataset = CreateDatasetSynthesis(phase = "train", input_path = args.input_path, contrast1 = args.contrast1, contrast2 = args.contrast2)
-    dataset_val = CreateDatasetSynthesis(phase = "val", input_path = args.input_path, contrast1 = args.contrast1, contrast2 = args.contrast2 )
+    dataset = CreateDatasetSynthesis(phase = "train", input_path = args.input_path, contrast1 = args.contrast1, contrast2 = args.contrast2, image_size = args.image_size)
+    dataset_val = CreateDatasetSynthesis(phase = "val", input_path = args.input_path, contrast1 = args.contrast1, contrast2 = args.contrast2, image_size = args.image_size )
 
 
     
@@ -142,8 +142,8 @@ def train_syndiff(rank, gpu, args):
     gen_diffusive_1 = NCSNpp(args).to(device)
     gen_diffusive_2 = NCSNpp(args).to(device)  
     #networks performing translation
-    gen_non_diffusive_1to2 = backbones.generator_resnet.define_G(netG='resnet_6blocks',gpu_ids=gpu_ids)
-    gen_non_diffusive_2to1 = backbones.generator_resnet.define_G(netG='resnet_6blocks',gpu_ids=gpu_ids)
+    gen_non_diffusive_1to2 = backbones.generator_resnet.define_G(netG='resnet_6blocks',ngf=args.ngf,gpu_ids=gpu_ids)
+    gen_non_diffusive_2to1 = backbones.generator_resnet.define_G(netG='resnet_6blocks',ngf=args.ngf,gpu_ids=gpu_ids)
     
     disc_diffusive_1 = Discriminator_large(nc = 2, ngf = args.ngf, 
                                    t_emb_dim = args.t_emb_dim,
@@ -152,8 +152,8 @@ def train_syndiff(rank, gpu, args):
                                    t_emb_dim = args.t_emb_dim,
                                    act=nn.LeakyReLU(0.2)).to(device)
     
-    disc_non_diffusive_cycle1 = backbones.generator_resnet.define_D(gpu_ids=gpu_ids)
-    disc_non_diffusive_cycle2 = backbones.generator_resnet.define_D(gpu_ids=gpu_ids)
+    disc_non_diffusive_cycle1 = backbones.generator_resnet.define_D(ndf=args.ngf,gpu_ids=gpu_ids)
+    disc_non_diffusive_cycle2 = backbones.generator_resnet.define_D(ndf=args.ngf,gpu_ids=gpu_ids)
     
     broadcast_params(gen_diffusive_1.parameters())
     broadcast_params(gen_diffusive_2.parameters())
