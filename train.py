@@ -280,7 +280,6 @@ def train_syndiff(rank, gpu, args):
     gen_diffusive_1 = NCSNpp(args).to(device)
     gen_diffusive_2 = NCSNpp(args).to(device)  
     #networks performing translation
-    args.num_channels=1
     gen_non_diffusive_1to2 = backbones.generator_resnet.define_G(netG='resnet_6blocks',gpu_ids=gpu_ids)
     gen_non_diffusive_2to1 = backbones.generator_resnet.define_G(netG='resnet_6blocks',gpu_ids=gpu_ids)
     
