@@ -26,8 +26,41 @@ def copy_source(file, output_dir):
     shutil.copyfile(file, os.path.join(output_dir, os.path.basename(file)))
             
 def broadcast_params(params):
+    if not dist.is_initialized():
+        return
     for param in params:
         dist.broadcast(param.data, src=0)
+
+
+def resolve_device(gpu):
+    """Pick the training device, falling back to CPU when CUDA is unavailable."""
+    if torch.cuda.is_available():
+        return torch.device('cuda:{}'.format(gpu))
+    return torch.device('cpu')
+
+
+def maybe_ddp(model, device_ids):
+    """Wrap in DistributedDataParallel only when a process group is active.
+
+    Single-process runs keep the bare module, so the saved state_dict has no
+    'module.' prefix; load_checkpoint() in test.py handles both layouts.
+    """
+    if not dist.is_initialized():
+        return model
+    return nn.parallel.DistributedDataParallel(model, device_ids=device_ids or None)
+
+
+def load_model_state(model, state_dict):
+    """Load a state_dict saved with or without the DDP 'module.' prefix.
+
+    Whether the prefix is present depends on how many processes the run that
+    wrote the checkpoint used, so normalise it against the model at hand.
+    """
+    target = model.module if isinstance(model, nn.parallel.DistributedDataParallel) else model
+    prefix = 'module.'
+    state_dict = {(k[len(prefix):] if k.startswith(prefix) else k): v
+                  for k, v in state_dict.items()}
+    target.load_state_dict(state_dict)
 
 
 #%% Diffusion coefficients 
@@ -197,10 +230,13 @@ def train_syndiff(rank, gpu, args):
     #rank = args.node_rank * args.num_process_per_node + gpu
     
     torch.manual_seed(args.seed + rank)
-    torch.cuda.manual_seed(args.seed + rank)
-    torch.cuda.manual_seed_all(args.seed + rank)
-    device = torch.device('cuda:{}'.format(gpu))
-    
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(args.seed + rank)
+        torch.cuda.manual_seed_all(args.seed + rank)
+    device = resolve_device(gpu)
+    # gpu_ids/device_ids are only meaningful for CUDA runs
+    gpu_ids = [gpu] if device.type == 'cuda' else []
+
     batch_size = args.batch_size
     
     nz = args.nz #latent dimension
@@ -243,8 +279,8 @@ def train_syndiff(rank, gpu, args):
     gen_diffusive_2 = NCSNpp(args).to(device)  
     #networks performing translation
     args.num_channels=1
-    gen_non_diffusive_1to2 = backbones.generator_resnet.define_G(netG='resnet_6blocks',gpu_ids=[gpu])
-    gen_non_diffusive_2to1 = backbones.generator_resnet.define_G(netG='resnet_6blocks',gpu_ids=[gpu])
+    gen_non_diffusive_1to2 = backbones.generator_resnet.define_G(netG='resnet_6blocks',gpu_ids=gpu_ids)
+    gen_non_diffusive_2to1 = backbones.generator_resnet.define_G(netG='resnet_6blocks',gpu_ids=gpu_ids)
     
     disc_diffusive_1 = Discriminator_large(nc = 2, ngf = args.ngf, 
                                    t_emb_dim = args.t_emb_dim,
@@ -253,8 +289,8 @@ def train_syndiff(rank, gpu, args):
                                    t_emb_dim = args.t_emb_dim,
                                    act=nn.LeakyReLU(0.2)).to(device)
     
-    disc_non_diffusive_cycle1 = backbones.generator_resnet.define_D(gpu_ids=[gpu])
-    disc_non_diffusive_cycle2 = backbones.generator_resnet.define_D(gpu_ids=[gpu])
+    disc_non_diffusive_cycle1 = backbones.generator_resnet.define_D(gpu_ids=gpu_ids)
+    disc_non_diffusive_cycle2 = backbones.generator_resnet.define_D(gpu_ids=gpu_ids)
     
     broadcast_params(gen_diffusive_1.parameters())
     broadcast_params(gen_diffusive_2.parameters())
@@ -299,15 +335,15 @@ def train_syndiff(rank, gpu, args):
     
     
     #ddp
-    gen_diffusive_1 = nn.parallel.DistributedDataParallel(gen_diffusive_1, device_ids=[gpu])
-    gen_diffusive_2 = nn.parallel.DistributedDataParallel(gen_diffusive_2, device_ids=[gpu])
-    gen_non_diffusive_1to2 = nn.parallel.DistributedDataParallel(gen_non_diffusive_1to2, device_ids=[gpu])
-    gen_non_diffusive_2to1 = nn.parallel.DistributedDataParallel(gen_non_diffusive_2to1, device_ids=[gpu])    
-    disc_diffusive_1 = nn.parallel.DistributedDataParallel(disc_diffusive_1, device_ids=[gpu])
-    disc_diffusive_2 = nn.parallel.DistributedDataParallel(disc_diffusive_2, device_ids=[gpu])
+    gen_diffusive_1 = maybe_ddp(gen_diffusive_1, gpu_ids)
+    gen_diffusive_2 = maybe_ddp(gen_diffusive_2, gpu_ids)
+    gen_non_diffusive_1to2 = maybe_ddp(gen_non_diffusive_1to2, gpu_ids)
+    gen_non_diffusive_2to1 = maybe_ddp(gen_non_diffusive_2to1, gpu_ids)
+    disc_diffusive_1 = maybe_ddp(disc_diffusive_1, gpu_ids)
+    disc_diffusive_2 = maybe_ddp(disc_diffusive_2, gpu_ids)
 
-    disc_non_diffusive_cycle1 = nn.parallel.DistributedDataParallel(disc_non_diffusive_cycle1, device_ids=[gpu])
-    disc_non_diffusive_cycle2 = nn.parallel.DistributedDataParallel(disc_non_diffusive_cycle2, device_ids=[gpu])
+    disc_non_diffusive_cycle1 = maybe_ddp(disc_non_diffusive_cycle1, gpu_ids)
+    disc_non_diffusive_cycle2 = maybe_ddp(disc_non_diffusive_cycle2, gpu_ids)
     
     exp = args.exp
     output_path = args.output_path
@@ -331,10 +367,10 @@ def train_syndiff(rank, gpu, args):
         checkpoint = torch.load(checkpoint_file, map_location=device, weights_only=False)
         init_epoch = checkpoint['epoch']
         epoch = init_epoch
-        gen_diffusive_1.load_state_dict(checkpoint['gen_diffusive_1_dict'])
-        gen_diffusive_2.load_state_dict(checkpoint['gen_diffusive_2_dict'])
-        gen_non_diffusive_1to2.load_state_dict(checkpoint['gen_non_diffusive_1to2_dict'])
-        gen_non_diffusive_2to1.load_state_dict(checkpoint['gen_non_diffusive_2to1_dict'])        
+        load_model_state(gen_diffusive_1, checkpoint['gen_diffusive_1_dict'])
+        load_model_state(gen_diffusive_2, checkpoint['gen_diffusive_2_dict'])
+        load_model_state(gen_non_diffusive_1to2, checkpoint['gen_non_diffusive_1to2_dict'])
+        load_model_state(gen_non_diffusive_2to1, checkpoint['gen_non_diffusive_2to1_dict'])        
         # load G
         
         optimizer_gen_diffusive_1.load_state_dict(checkpoint['optimizer_gen_diffusive_1'])
@@ -346,19 +382,19 @@ def train_syndiff(rank, gpu, args):
         optimizer_gen_non_diffusive_2to1.load_state_dict(checkpoint['optimizer_gen_non_diffusive_2to1'])
         scheduler_gen_non_diffusive_2to1.load_state_dict(checkpoint['scheduler_gen_non_diffusive_2to1'])          
         # load D
-        disc_diffusive_1.load_state_dict(checkpoint['disc_diffusive_1_dict'])
+        load_model_state(disc_diffusive_1, checkpoint['disc_diffusive_1_dict'])
         optimizer_disc_diffusive_1.load_state_dict(checkpoint['optimizer_disc_diffusive_1'])
         scheduler_disc_diffusive_1.load_state_dict(checkpoint['scheduler_disc_diffusive_1'])
 
-        disc_diffusive_2.load_state_dict(checkpoint['disc_diffusive_2_dict'])
+        load_model_state(disc_diffusive_2, checkpoint['disc_diffusive_2_dict'])
         optimizer_disc_diffusive_2.load_state_dict(checkpoint['optimizer_disc_diffusive_2'])
         scheduler_disc_diffusive_2.load_state_dict(checkpoint['scheduler_disc_diffusive_2'])   
         # load D_for cycle
-        disc_non_diffusive_cycle1.load_state_dict(checkpoint['disc_non_diffusive_cycle1_dict'])
+        load_model_state(disc_non_diffusive_cycle1, checkpoint['disc_non_diffusive_cycle1_dict'])
         optimizer_disc_non_diffusive_cycle1.load_state_dict(checkpoint['optimizer_disc_non_diffusive_cycle1'])
         scheduler_disc_non_diffusive_cycle1.load_state_dict(checkpoint['scheduler_disc_non_diffusive_cycle1'])
 
-        disc_non_diffusive_cycle2.load_state_dict(checkpoint['disc_non_diffusive_cycle2_dict'])
+        load_model_state(disc_non_diffusive_cycle2, checkpoint['disc_non_diffusive_cycle2_dict'])
         optimizer_disc_non_diffusive_cycle2.load_state_dict(checkpoint['optimizer_disc_non_diffusive_cycle2'])
         scheduler_disc_non_diffusive_cycle2.load_state_dict(checkpoint['scheduler_disc_non_diffusive_cycle2'])
         global_step = checkpoint['global_step']
@@ -718,15 +754,24 @@ def init_processes(rank, size, fn, args):
     """ Initialize the distributed environment. """
     os.environ['MASTER_ADDR'] = args.master_address
     os.environ['MASTER_PORT'] = args.port_num
-    torch.cuda.set_device(args.local_rank)
     gpu = args.local_rank
-    dist.init_process_group(backend='nccl', init_method='env://', rank=rank, world_size=size)
+    if torch.cuda.is_available():
+        torch.cuda.set_device(args.local_rank)
+
+    # A process group is only needed when the run actually spans processes.
+    # Setting one up unconditionally made single-GPU runs depend on NCCL and
+    # made CPU-only runs impossible.
+    if size > 1:
+        dist.init_process_group(backend='nccl', init_method='env://', rank=rank, world_size=size)
+
     fn(rank, gpu, args)
-    dist.barrier()
-    cleanup()  
+
+    if dist.is_initialized():
+        dist.barrier()
+        cleanup()
 
 def cleanup():
-    dist.destroy_process_group()    
+    dist.destroy_process_group()
 #%%
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('syndiff parameters')
