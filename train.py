@@ -577,10 +577,8 @@ def train_syndiff(rank, gpu, args):
             #cycle loss
             errG1_cycle=F.l1_loss(x1_0_predict_cycle,real_data1)
             errG2_cycle=F.l1_loss(x2_0_predict_cycle,real_data2)            
-            errG_cycle = errG1_cycle + errG2_cycle            
+            errG_cycle = errG1_cycle + errG2_cycle
 
-            torch.autograd.set_detect_anomaly(True)
-            
             errG = args.lambda_l1_loss*errG_cycle +  errG_adv + errG_cycle_adv + args.lambda_l1_loss*errG_L1
             errG.backward()
             
