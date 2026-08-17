@@ -50,17 +50,26 @@ def maybe_ddp(model, device_ids):
     return nn.parallel.DistributedDataParallel(model, device_ids=device_ids or None)
 
 
-def load_model_state(model, state_dict):
-    """Load a state_dict saved with or without the DDP 'module.' prefix.
+def strip_module_prefix(state_dict):
+    """Drop the 'module.' prefixes that parallel wrappers add to every key.
 
-    Whether the prefix is present depends on how many processes the run that
-    wrote the checkpoint used, so normalise it against the model at hand.
+    Checkpoints carry one prefix per wrapper the saving run used: none for a
+    single-process run, one for DistributedDataParallel, and two for the
+    DDP-over-DataParallel nesting older revisions produced.
     """
-    target = model.module if isinstance(model, nn.parallel.DistributedDataParallel) else model
     prefix = 'module.'
-    state_dict = {(k[len(prefix):] if k.startswith(prefix) else k): v
-                  for k, v in state_dict.items()}
-    target.load_state_dict(state_dict)
+    stripped = {}
+    for key, value in state_dict.items():
+        while key.startswith(prefix):
+            key = key[len(prefix):]
+        stripped[key] = value
+    return stripped
+
+
+def load_model_state(model, state_dict):
+    """Load a state_dict saved with or without the DDP 'module.' prefix."""
+    target = model.module if isinstance(model, nn.parallel.DistributedDataParallel) else model
+    target.load_state_dict(strip_module_prefix(state_dict))
 
 
 #%% Diffusion coefficients 

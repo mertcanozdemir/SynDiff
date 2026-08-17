@@ -140,13 +140,17 @@ def load_checkpoint(checkpoint_dir, netG, name_of_network, epoch,device = 'cuda:
     checkpoint = torch.load(checkpoint_file, map_location=device)
     ckpt = checkpoint
 
-    # Checkpoints written by a DistributedDataParallel run carry a 'module.'
-    # prefix, single-process runs do not. Blindly dropping the first 7
-    # characters corrupted every key of an unprefixed checkpoint.
+    # Checkpoints carry one 'module.' prefix per parallel wrapper the saving
+    # run used: none for a single-process run, one for DistributedDataParallel.
+    # Blindly dropping the first 7 characters corrupted every key of an
+    # unprefixed checkpoint.
     prefix = 'module.'
-    ckpt = {(k[len(prefix):] if k.startswith(prefix) else k): v
-            for k, v in ckpt.items()}
-    netG.load_state_dict(ckpt)
+    normalised = {}
+    for key, value in ckpt.items():
+        while key.startswith(prefix):
+            key = key[len(prefix):]
+        normalised[key] = value
+    netG.load_state_dict(normalised)
     netG.eval()
 #%%
 def sample_and_test(args):
