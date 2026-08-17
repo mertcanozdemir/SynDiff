@@ -486,14 +486,17 @@ def train_syndiff(rank, gpu, args):
             latent_z1 = torch.randn(batch_size, nz, device=device)
             latent_z2 = torch.randn(batch_size, nz, device=device)
             
-            x1_0_predict = gen_non_diffusive_2to1(real_data2)
-            x2_0_predict = gen_non_diffusive_1to2(real_data1)            
-            #x_tp1 is concatenated with source contrast and x_0_predict is predicted
-            x1_0_predict_diff = gen_diffusive_1(torch.cat((x1_tp1.detach(),x2_0_predict),axis=1), t1, latent_z1)
-            x2_0_predict_diff = gen_diffusive_2(torch.cat((x2_tp1.detach(),x1_0_predict),axis=1), t2, latent_z2)
-            #sampling q(x_t | x_0_predict, x_t+1)
-            x1_pos_sample = sample_posterior(pos_coeff, x1_0_predict_diff[:,[0],:], x1_tp1, t1)
-            x2_pos_sample = sample_posterior(pos_coeff, x2_0_predict_diff[:,[0],:], x2_tp1, t2)
+            # only D is updated here, so the generators run without building a
+            # graph; their gradients would be discarded by zero_grad() below
+            with torch.no_grad():
+                x1_0_predict = gen_non_diffusive_2to1(real_data2)
+                x2_0_predict = gen_non_diffusive_1to2(real_data1)
+                #x_tp1 is concatenated with source contrast and x_0_predict is predicted
+                x1_0_predict_diff = gen_diffusive_1(torch.cat((x1_tp1.detach(),x2_0_predict),axis=1), t1, latent_z1)
+                x2_0_predict_diff = gen_diffusive_2(torch.cat((x2_tp1.detach(),x1_0_predict),axis=1), t2, latent_z2)
+                #sampling q(x_t | x_0_predict, x_t+1)
+                x1_pos_sample = sample_posterior(pos_coeff, x1_0_predict_diff[:,[0],:], x1_tp1, t1)
+                x2_pos_sample = sample_posterior(pos_coeff, x2_0_predict_diff[:,[0],:], x2_tp1, t2)
             #D output for fake sample x_pos_sample
             output1 = disc_diffusive_1(x1_pos_sample, t1, x1_tp1.detach()).view(-1)
             output2 = disc_diffusive_2(x2_pos_sample, t2, x2_tp1.detach()).view(-1)       
@@ -528,8 +531,9 @@ def train_syndiff(rank, gpu, args):
             errD_cycle_real.backward(retain_graph=True)
             # train with fake
             
-            x1_0_predict = gen_non_diffusive_2to1(real_data2)
-            x2_0_predict = gen_non_diffusive_1to2(real_data1)
+            with torch.no_grad():
+                x1_0_predict = gen_non_diffusive_2to1(real_data2)
+                x2_0_predict = gen_non_diffusive_1to2(real_data1)
 
             D_cycle1_fake = disc_non_diffusive_cycle1(x1_0_predict).view(-1)
             D_cycle2_fake = disc_non_diffusive_cycle2(x2_0_predict).view(-1) 
