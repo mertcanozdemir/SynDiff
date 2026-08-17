@@ -734,9 +734,9 @@ def train_syndiff(rank, gpu, args):
             
             x1_t = torch.cat((torch.randn_like(real_data),source_data),axis=1)
             #diffusion steps
-            fake_sample1 = sample_from_model(pos_coeff, gen_diffusive_1, args.num_timesteps, x1_t, T, args)
+            fake_sample1 = sample_from_model(pos_coeff, gen_diffusive_2, args.num_timesteps, x1_t, T, args)
 
-            
+
             fake_sample1 = to_range_0_1(fake_sample1) ; fake_sample1 = fake_sample1/fake_sample1.mean()
             real_data = to_range_0_1(real_data) ; real_data = real_data/real_data.mean()
             
