@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 import torch
 
-from train import (Diffusion_Coefficients, Posterior_Coefficients, extract,
-                   get_sigma_schedule, get_time_schedule, q_sample_pairs,
-                   sample_posterior)
+from diffusion import (Diffusion_Coefficients, Posterior_Coefficients, extract,
+                       get_sigma_schedule, get_time_schedule, q_sample_pairs,
+                       sample_posterior)
 
 
 def test_sigma_schedule_shapes_and_bounds(small_config):
