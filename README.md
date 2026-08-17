@@ -66,8 +66,8 @@ to `--contrast1` and `--contrast2`.
 
 Each `.mat` file is an HDF5 file holding a single variable named `data_fs` of
 shape `(#images, width, height)`, with image values in roughly `[0, 1]`.
-Volumes are zero-padded out to 256x256 on load and rescaled to `[-1, 1]`, so
-neither dimension may exceed 256.
+Volumes are zero-padded out to `--image_size` squared on load and rescaled to
+`[-1, 1]`, so neither dimension may exceed that size.
 
 ### Sample Data
 Sample toy data can be found under the `SynDiff_sample_data` folder. Note that
@@ -84,6 +84,11 @@ val / test parts and name the parts as shown above.
 ```
 python3 train.py --image_size 256 --exp exp_syndiff --num_channels 2 --num_channels_dae 64 --ch_mult 1 1 2 2 4 4 --num_timesteps 4 --num_res_blocks 2 --batch_size 1 --contrast1 T1 --contrast2 T2 --num_epoch 500 --ngf 64 --embedding_type positional --use_ema --ema_decay 0.999 --r1_gamma 1. --z_emb_dim 256 --lr_d 1e-4 --lr_g 1.6e-4 --lazy_reg 10 --num_process_per_node 1 --save_content --local_rank 0 --input_path /input/path/for/data --output_path /output/for/results
 ```
+
+`--ngf` sets the channel width of the discriminators *and* of the translation
+networks, and `--image_size` sets both the network resolution and the grid the
+input volumes are padded to. The values above, `64` and `256`, are the ones
+used in the paper.
 
 `--num_process_per_node` controls the number of processes. With more than one
 a NCCL process group is set up and the networks are wrapped in
