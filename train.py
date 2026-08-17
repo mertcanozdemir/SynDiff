@@ -268,8 +268,10 @@ def train_syndiff(rank, gpu, args):
                                                sampler=val_sampler,
                                                drop_last = True)
 
-    val_l1_loss=np.zeros([2,args.num_epoch,len(data_loader_val)])
-    val_psnr_values=np.zeros([2,args.num_epoch,len(data_loader_val)])
+    # the epoch loop below runs over range(init_epoch, args.num_epoch + 1),
+    # so epoch args.num_epoch needs a slot too
+    val_l1_loss=np.zeros([2,args.num_epoch+1,len(data_loader_val)])
+    val_psnr_values=np.zeros([2,args.num_epoch+1,len(data_loader_val)])
     print('train data size:'+str(len(data_loader)))
     print('val data size:'+str(len(data_loader_val)))
     to_range_0_1 = lambda x: (x + 1.) / 2.
