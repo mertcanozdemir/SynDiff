@@ -151,9 +151,11 @@ def load_checkpoint(checkpoint_dir, netG, name_of_network, epoch,device = 'cuda:
 #%%
 def sample_and_test(args):
     torch.manual_seed(42)
-    # device = 'cuda:0'
-    torch.cuda.set_device(args.gpu_chose)
-    device = torch.device('cuda:{}'.format(args.gpu_chose))
+    if torch.cuda.is_available():
+        torch.cuda.set_device(args.gpu_chose)
+        device = torch.device('cuda:{}'.format(args.gpu_chose))
+    else:
+        device = torch.device('cpu')
     epoch_chosen=args.which_epoch
     
     to_range_0_1 = lambda x: (x + 1.) / 2.
