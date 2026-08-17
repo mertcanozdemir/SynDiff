@@ -5,7 +5,7 @@ Official PyTorch implementation of SynDiff described in the [paper](https://ieee
 Muzaffer Özbey*, Onat Dalmaz*, Salman UH Dar, Hasan A Bedel, Şaban Özturk, Alper Güngör, Tolga Çukur, "Unsupervised Medical Image Translation With Adversarial Diffusion Models," in IEEE Transactions on Medical Imaging, vol. 42, no. 12, pp. 3524-3539, Dec. 2023, doi: 10.1109/TMI.2023.3290149.
 
 *: equal contribution
-
+ 
 <img src="./figures/adv_diff.png" width="600px">
 
 <img src="./figures/syndiff.png" width="600px">
