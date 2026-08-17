@@ -186,13 +186,18 @@ def sample_and_test(args):
          
     save_dir = exp_path + "/generated_samples/epoch_{}".format(epoch_chosen)
     
-    crop = transforms.CenterCrop((256, 152))
+    # CreateDatasetSynthesis pads every volume out to 256x256; this crop undoes
+    # that padding. The defaults match the IXI/BRATS geometry the paper used --
+    # set --crop_h/--crop_w to your own slice size for other datasets.
+    crop = transforms.CenterCrop((args.crop_h, args.crop_w))
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     loss1 = np.zeros((1,len(data_loader)))
     loss2 = np.zeros((1,len(data_loader)))
-    syn_im1=np.zeros((256,256,len(data_loader)))
-    syn_im2=np.zeros((256,256,len(data_loader)))
+    # collected per slice and stacked afterwards, so the stored volume always
+    # matches the cropped image size
+    syn_im1=[]
+    syn_im2=[]
     for iteration, (x , y) in enumerate(data_loader): 
         
         real_data = x.to(device, non_blocking=True)
@@ -210,7 +215,7 @@ def sample_and_test(args):
         fake_sample1 = crop(fake_sample1) 
         real_data = crop(real_data)
         source_data = crop(source_data) 
-        syn_im1[:,:,iteration]=np.squeeze(fake_sample1.cpu().numpy())
+        syn_im1.append(np.squeeze(fake_sample1.cpu().numpy()))
         
         loss1[0, iteration] = psnr(fake_sample1, real_data).cpu().numpy()
         print(str(iteration))
@@ -236,7 +241,7 @@ def sample_and_test(args):
         fake_sample2 = crop(fake_sample2) 
         real_data = crop(real_data)
         source_data = crop(source_data)
-        syn_im2[:,:,iteration]=np.squeeze(fake_sample2.cpu().numpy()) 
+        syn_im2.append(np.squeeze(fake_sample2.cpu().numpy())) 
         
         loss2[0, iteration] = psnr(fake_sample2, real_data).cpu().numpy()
         print(str(iteration))
@@ -248,6 +253,9 @@ def sample_and_test(args):
 
     print(np.nanmean(loss2))
     np.save('{}/psnr_values2.npy'.format(save_dir), loss2)
+
+    syn_im1 = np.stack(syn_im1, axis=-1)
+    syn_im2 = np.stack(syn_im2, axis=-1)
 
     f = h5py.File(save_dir + '/im_syn.mat',  "w")
     f.create_dataset('images_'+args.contrast1+'syn', data=syn_im1)
@@ -338,6 +346,10 @@ if __name__ == '__main__':
                         help='contrast selection for model')
     parser.add_argument('--contrast2', type=str, default='T2',
                         help='contrast selection for model')
+    parser.add_argument('--crop_h', type=int, default=256,
+                        help='height the padded output is cropped back to')
+    parser.add_argument('--crop_w', type=int, default=152,
+                        help='width the padded output is cropped back to')
     parser.add_argument('--which_epoch', type=int, default=50)
     parser.add_argument('--gpu_chose', type=int, default=0)
 
