@@ -326,7 +326,9 @@ def train_syndiff(rank, gpu, args):
     
     if args.resume:
         checkpoint_file = os.path.join(exp_path, 'content.pth')
-        checkpoint = torch.load(checkpoint_file, map_location=device)
+        # content.pth stores the argparse.Namespace alongside the tensors, so it
+        # cannot be read under the weights_only=True default of torch>=2.6.
+        checkpoint = torch.load(checkpoint_file, map_location=device, weights_only=False)
         init_epoch = checkpoint['epoch']
         epoch = init_epoch
         gen_diffusive_1.load_state_dict(checkpoint['gen_diffusive_1_dict'])
